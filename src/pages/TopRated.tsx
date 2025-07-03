@@ -1,7 +1,6 @@
-import React from 'react';
-import { games } from '../data/games';
-import GameCard from '../components/GameCard';
-import type { Game, Review } from '../data/games';
+import React, { useState, useEffect } from 'react';
+import StarRating from '../components/StarRating';
+import { apiService, Game, Review } from '../services/api';
 
 function getAverageRating(game: Game) {
   if (!game.reviews.length) return 0;
@@ -9,10 +8,29 @@ function getAverageRating(game: Game) {
 }
 
 const TopRated: React.FC = () => {
-  // Ordenar por promedio de calificación y tomar los 4 mejores
-  const topRated = [...games]
-    .sort((a: Game, b: Game) => getAverageRating(b) - getAverageRating(a))
-    .slice(0, 4);
+  const [topRated, setTopRated] = useState<Game[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTopRated = async () => {
+      try {
+        setLoading(true);
+        const games = await apiService.getTopRatedGames();
+        setTopRated(games);
+      } catch (err) {
+        setError('Error loading top rated games');
+        console.error('Error fetching top rated games:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTopRated();
+  }, []);
+  if (loading) return <div className="container mt-4">Loading...</div>;
+  if (error) return <div className="container mt-4">Error: {error}</div>;
+
   return (
     <div className="container" style={{ maxWidth: 1200, marginTop: 40, marginBottom: 40 }}>
       <h2 className="mb-5 text-center fw-bold">Juegos con mejor calificación</h2>
@@ -31,6 +49,16 @@ const TopRated: React.FC = () => {
               <div className="card-body d-flex flex-column">
                 <h5 className="card-title">{game.title}</h5>
                 <p className="card-text">${game.price.toFixed(2)}</p>
+                <div className="mb-2">
+                  <StarRating 
+                    rating={getAverageRating(game)} 
+                    readonly={true} 
+                    size="sm"
+                  />
+                  <small className="text-muted ms-2">
+                    ({game.reviews.length} reseñas)
+                  </small>
+                </div>
                 <div className="mt-auto d-flex gap-2">
                   <button className="btn btn-outline-primary flex-fill" onClick={() => window.location.href = `/game/${game.id}`}>Detalles</button>
                   <button className="btn btn-success flex-fill">Agregar al carrito</button>

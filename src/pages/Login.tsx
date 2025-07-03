@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 const Login: React.FC = () => {
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ name: '', password: '' });
   const [error, setError] = useState('');
   const [view, setView] = useState<'login' | 'forgot' | 'register' | 'forgotSent' | 'registerSent'>('login');
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
@@ -15,13 +15,15 @@ const Login: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = login(form.email, form.password);
+    setError('');
+    const success = await login(form.name, form.password);
     if (success) {
       navigate('/');
     } else {
-      setError('Credenciales incorrectas');
+      setError('Usuario o contraseña incorrectos');
     }
   };
 
@@ -44,15 +46,15 @@ const Login: React.FC = () => {
     <div className="container mt-5" style={{ maxWidth: 400 }}>
       {view === 'login' && (
         <>
-          <h2 className="mb-4">Iniciar sesión (Admin)</h2>
+          <h2 className="mb-4">Iniciar sesión</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label className="form-label">Email</label>
+              <label className="form-label">Usuario</label>
               <input
-                type="email"
+                type="text"
                 className="form-control"
-                name="email"
-                value={form.email}
+                name="name"
+                value={form.name}
                 onChange={handleChange}
                 required
               />
@@ -72,8 +74,8 @@ const Login: React.FC = () => {
             <button type="submit" className="btn btn-primary w-100">Iniciar sesión</button>
           </form>
           <div className="d-flex flex-column align-items-center mt-3">
-            <button className="btn btn-link p-0 mb-2" style={{fontSize: '0.95rem'}} onClick={() => setView('forgot')}>¿Olvidaste tu contraseña?</button>
-            <button className="btn btn-link p-0" style={{fontSize: '0.95rem'}} onClick={() => setView('register')}>¿No tienes cuenta? Regístrate</button>
+            <span className="text-muted" style={{fontSize: '0.95rem'}}>Usuario: <b>admin</b> o <b>usuario</b></span>
+            <span className="text-muted" style={{fontSize: '0.95rem'}}>Contraseña: <b>admin123</b> o <b>usuario123</b></span>
           </div>
         </>
       )}

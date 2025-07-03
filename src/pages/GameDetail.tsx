@@ -1,22 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { games } from '../data/games';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
+import StarRating from '../components/StarRating';
+import { apiService, Game, Review } from '../services/api';
 
-interface Review {
-  user: string;
-  comment: string;
-  rating: number;
-}
 
-interface Game {
-  id: number;
-  title: string;
-  image: string;
-  price: number;
-  trailer: string;
-  reviews: Review[];
-}
 
 const getEmbedUrl = (url: string) => {
   // Si ya es un enlace /embed/, lo retorna igual
@@ -29,10 +18,70 @@ const getEmbedUrl = (url: string) => {
 
 const GameDetail: React.FC = () => {
   const { id } = useParams();
-  const game = games.find((g: Game) => g.id === Number(id));
   const { addToCart } = useContext(CartContext);
+  const { user, token } = useContext(AuthContext);
+  
+  const [game, setGame] = useState<Game | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [newReview, setNewReview] = useState({
+    rating: 0,
+    comment: ''
+  });
+  const [showReviewForm, setShowReviewForm] = useState(false);
 
-  if (!game) return <div className="container mt-4">Game not found.</div>;
+  useEffect(() => {
+    const fetchGame = async () => {
+      try {
+        setLoading(true);
+        const gameData = await apiService.getGame(Number(id));
+        setGame(gameData);
+      } catch (err) {
+        setError('Error loading game');
+        console.error('Error fetching game:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchGame();
+    }
+  }, [id]);
+
+  if (loading) return <div className="container mt-4">Loading...</div>;
+  if (error || !game) return <div className="container mt-4">Game not found.</div>;
+
+  const averageRating = game.reviews.length > 0 
+    ? game.reviews.reduce((sum: number, review: Review) => sum + review.rating, 0) / game.reviews.length 
+    : 0;
+
+  const handleSubmitReview = async () => {
+    if (newReview.rating === 0 || !newReview.comment.trim()) {
+      alert('Por favor completa la calificación y el comentario');
+      return;
+    }
+
+    try {
+      await apiService.addReview(game.id, {
+        user: user?.name || 'Anonymous',
+        comment: newReview.comment,
+        rating: newReview.rating
+      }, token || '');
+
+      // Refresh the game data to show the new review
+      const updatedGame = await apiService.getGame(game.id);
+      setGame(updatedGame);
+      
+      setNewReview({ rating: 0, comment: '' });
+      setShowReviewForm(false);
+      alert('Reseña enviada exitosamente!');
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      alert('Error al enviar la reseña. Inténtalo de nuevo.');
+    }
+  };
 
   return (
     <div className="container mt-4">
@@ -42,6 +91,10 @@ const GameDetail: React.FC = () => {
         </div>
         <div className="col-md-7">
           <h2>{game.title}</h2>
+          <div className="d-flex align-items-center mb-2">
+            <StarRating rating={averageRating} readonly={true} size="lg" />
+            <span className="ms-2 text-muted">({game.reviews.length} reseñas)</span>
+          </div>
           <p className="lead">${game.price.toFixed(2)}</p>
           <button
             className="btn btn-success mb-3"
@@ -61,10 +114,72 @@ const GameDetail: React.FC = () => {
             ></iframe>
           </div>
           <h4>Reviews</h4>
+          
+          {/* Review Form */}
+          {user && (
+            <div className="mb-4">
+              {!showReviewForm ? (
+                <button 
+                  className="btn btn-outline-primary mb-3"
+                  onClick={() => setShowReviewForm(true)}
+                >
+                  Escribir una reseña
+                </button>
+              ) : (
+                <div className="card p-3 mb-3">
+                  <h6>Escribir reseña</h6>
+                  <div className="mb-3">
+                    <label className="form-label">Calificación:</label>
+                    <StarRating 
+                      rating={newReview.rating} 
+                      onRatingChange={(rating) => setNewReview(prev => ({ ...prev, rating }))}
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Comentario:</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      value={newReview.comment}
+                      onChange={(e) => setNewReview(prev => ({ ...prev, comment: e.target.value }))}
+                      placeholder="Comparte tu experiencia con este juego..."
+                    />
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button 
+                      className="btn btn-primary"
+                      onClick={handleSubmitReview}
+                    >
+                      Enviar reseña
+                    </button>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setShowReviewForm(false);
+                        setNewReview({ rating: 0, comment: '' });
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reviews List */}
           <ul className="list-group">
             {game.reviews.map((review: Review, idx: number) => (
               <li className="list-group-item" key={idx}>
-                <strong>{review.user}:</strong> {review.comment} <span className="text-warning">{'★'.repeat(review.rating)}</span>
+                <div className="d-flex justify-content-between align-items-start">
+                  <div>
+                    <strong>{review.user}</strong>
+                    <div className="mt-1">
+                      <StarRating rating={review.rating} readonly={true} size="sm" />
+                    </div>
+                    <p className="mb-0 mt-2">{review.comment}</p>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
