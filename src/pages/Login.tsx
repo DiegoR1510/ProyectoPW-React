@@ -77,6 +77,10 @@ const Login: React.FC = () => {
             <span className="text-muted" style={{fontSize: '0.95rem'}}>Usuario: <b>admin</b> o <b>usuario</b></span>
             <span className="text-muted" style={{fontSize: '0.95rem'}}>Contraseña: <b>admin123</b> o <b>usuario123</b></span>
           </div>
+          <div className="text-center mt-3">
+            <span>¿No tienes cuenta? </span>
+            <a href="/register" className="btn btn-link">Regístrate</a>
+          </div>
         </>
       )}
       {view === 'forgot' && (

@@ -8,17 +8,30 @@ const db = new Database('data.sqlite');
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  role TEXT NOT NULL
+  role TEXT NOT NULL,
+  is_verified INTEGER DEFAULT 0
+);
+`);
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS email_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  token TEXT NOT NULL,
+  type TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
 );
 `);
 
 // Insertar usuarios de ejemplo si no existen
 const existing = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (existing.count === 0) {
-  db.prepare('INSERT INTO users (name, password, role) VALUES (?, ?, ?)').run('admin', 'admin123', 'admin');
-  db.prepare('INSERT INTO users (name, password, role) VALUES (?, ?, ?)').run('usuario', 'usuario123', 'user');
+  db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run('admin', 'admin@admin.com', 'admin123', 'admin', 1);
+  db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run('usuario', 'usuario@usuario.com', 'usuario123', 'user', 1);
 }
 
 // Crear tabla de juegos
@@ -85,6 +98,17 @@ if (gamesExist.count === 0) {
     stmt.run(g.title, g.price, g.image, g.trailer, JSON.stringify(g.genre), JSON.stringify(g.platform));
   }
 }
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL,
+  user TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  rating INTEGER NOT NULL,
+  FOREIGN KEY (game_id) REFERENCES games(id)
+);
+`);
 
 // Exportar la instancia de la base de datos
 export default db; 

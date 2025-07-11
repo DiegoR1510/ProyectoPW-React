@@ -3,6 +3,8 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import jwt from 'jsonwebtoken';
 import db from './db.js';
+import { transporter } from './email.js';
+import crypto from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -130,16 +132,95 @@ app.post('/api/login', (req, res) => {
   res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
 });
 
+// Registro de usuario con email único y envío de email de confirmación
+app.post('/api/register', async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Faltan campos requeridos' });
+  }
+  // Verifica que el email no exista
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) {
+    return res.status(400).json({ message: 'El email ya está registrado' });
+  }
+  const stmt = db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)');
+  const info = stmt.run(name, email, password, 'user', 0);
+  // Generar token y guardar
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare('INSERT INTO email_tokens (user_id, token, type) VALUES (?, ?, ?)').run(info.lastInsertRowid, token, 'verify');
+  const confirmUrl = `http://localhost:3000/confirm-email?token=${token}`;
+  await transporter.sendMail({
+    from: 'Diego <20204879@aloe.ulima.edu.pe>',
+    to: email,
+    subject: 'Confirma tu correo',
+    html: `<p>Haz clic <a href="${confirmUrl}">aquí</a> para confirmar tu correo.</p>`
+  });
+  res.status(201).json({ id: info.lastInsertRowid, name, email });
+});
+
+// Confirmación de email
+app.get('/api/confirm-email', (req, res) => {
+  const { token } = req.query;
+  const row = db.prepare('SELECT user_id FROM email_tokens WHERE token = ? AND type = ?').get(token, 'verify');
+  if (!row) return res.status(400).json({ message: 'Token inválido' });
+  db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(row.user_id);
+  db.prepare('DELETE FROM email_tokens WHERE token = ?').run(token);
+  res.json({ message: 'Correo confirmado correctamente' });
+});
+
+// Solicitud de recuperación de contraseña
+app.post('/api/request-password-reset', async (req, res) => {
+  const { email } = req.body;
+  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (!user) return res.status(200).json({ message: 'Si el email existe, se enviará un enlace.' });
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare('INSERT INTO email_tokens (user_id, token, type) VALUES (?, ?, ?)').run(user.id, token, 'reset');
+  const resetUrl = `http://localhost:3000/reset-password?token=${token}`;
+  await transporter.sendMail({
+    from: 'Diego <20204879@aloe.ulima.edu.pe>',
+    to: email,
+    subject: 'Recupera tu contraseña',
+    html: `<p>Haz clic <a href="${resetUrl}">aquí</a> para restablecer tu contraseña.</p>`
+  });
+  res.json({ message: 'Si el email existe, se enviará un enlace.' });
+});
+
+// Restablecimiento de contraseña
+app.post('/api/reset-password', (req, res) => {
+  const { token, password } = req.body;
+  const row = db.prepare('SELECT user_id FROM email_tokens WHERE token = ? AND type = ?').get(token, 'reset');
+  if (!row) return res.status(400).json({ message: 'Token inválido' });
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(password, row.user_id);
+  db.prepare('DELETE FROM email_tokens WHERE token = ?').run(token);
+  res.json({ message: 'Contraseña actualizada correctamente' });
+});
+
 // --- RUTAS DE JUEGOS Y REVIEWS ---
 app.get('/api/games/top-rated', (req, res) => {
   const games = db.prepare('SELECT * FROM games').all();
-  // Simulación: no hay reviews aún, así que solo devolver los primeros 4
-  res.json(games.slice(0, 4));
+  const parsed = games.map(g => {
+    const genre = JSON.parse(g.genre);
+    const platform = JSON.parse(g.platform);
+    const reviews = db.prepare('SELECT id, user, comment, rating FROM reviews WHERE game_id = ?').all(g.id);
+    const avgRating = reviews.length
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : 0;
+    return { ...g, genre, platform, reviews, avgRating };
+  });
+  // Ordenar por promedio de rating descendente y devolver los primeros 4
+  parsed.sort((a, b) => b.avgRating - a.avgRating);
+  res.json(parsed.slice(0, 4));
 });
 
 app.get('/api/games/top-sellers', (req, res) => {
   const games = db.prepare('SELECT * FROM games').all();
-  res.json(games.slice(0, 4));
+  const parsed = games.slice(0, 4).map(g => ({
+    ...g,
+    genre: JSON.parse(g.genre),
+    platform: JSON.parse(g.platform),
+    reviews: []
+  }));
+  res.json(parsed);
 });
 
 app.get('/api/games', (req, res) => {
@@ -156,18 +237,15 @@ app.get('/api/games/:id', (req, res) => {
   }
   game.genre = JSON.parse(game.genre);
   game.platform = JSON.parse(game.platform);
-  // Las reviews se migrarán después
-  game.reviews = [];
+  // Obtener reviews de la base de datos
+  const reviews = db.prepare('SELECT id, user, comment, rating FROM reviews WHERE game_id = ?').all(game.id);
+  game.reviews = reviews;
   res.json(game);
 });
 
 // --- PROTEGER REVIEWS: SOLO USUARIOS AUTENTICADOS ---
 app.post('/api/games/:id/reviews', authenticateToken, (req, res) => {
   const gameId = parseInt(req.params.id);
-  const game = games.find(g => g.id === gameId);
-  if (!game) {
-    return res.status(404).json({ message: 'Game not found' });
-  }
   const { user, comment, rating } = req.body;
   if (!user || !comment || !rating) {
     return res.status(400).json({ message: 'User, comment, and rating are required' });
@@ -175,13 +253,14 @@ app.post('/api/games/:id/reviews', authenticateToken, (req, res) => {
   if (rating < 1 || rating > 5) {
     return res.status(400).json({ message: 'Rating must be between 1 and 5' });
   }
+  const stmt = db.prepare('INSERT INTO reviews (game_id, user, comment, rating) VALUES (?, ?, ?, ?)');
+  const info = stmt.run(gameId, user, comment, rating);
   const newReview = {
-    id: nextReviewId++,
+    id: info.lastInsertRowid,
     user,
     comment,
-    rating: parseInt(rating)
+    rating
   };
-  game.reviews.push(newReview);
   res.status(201).json(newReview);
 });
 

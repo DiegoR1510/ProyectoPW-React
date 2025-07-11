@@ -14,6 +14,9 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import TopSellers from './pages/TopSellers';
 import TopRated from './pages/TopRated';
+import ConfirmEmail from './pages/ConfirmEmail';
+import ResetPassword from './pages/ResetPassword';
+import Register from './pages/Register';
 
 const App: React.FC = () => {
   return (
@@ -33,6 +36,9 @@ const App: React.FC = () => {
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/top-sellers" element={<TopSellers />} />
               <Route path="/top-rated" element={<TopRated />} />
+              <Route path="/confirm-email" element={<ConfirmEmail />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/register" element={<Register />} />
             </Routes>
           </Router>
         </NewsProvider>
