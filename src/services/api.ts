@@ -16,6 +16,9 @@ export interface Game {
   reviews: Review[];
   genre: string[];
   platform: string[];
+  esta_oferta?: number;
+  offer?: boolean;
+  precio_oferta?: number;
 }
 
 export interface User {
@@ -23,6 +26,9 @@ export interface User {
   name: string;
   role: 'admin' | 'user';
 }
+
+// Evento personalizado para notificar cuando el token expira
+export const tokenExpiredEvent = new CustomEvent('tokenExpired');
 
 class ApiService {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -35,11 +41,36 @@ class ApiService {
       ...options,
     });
 
+    // Manejar errores de token expirado
+    if (response.status === 403) {
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.message === 'Token inválido') {
+        // Disparar evento para notificar que el token expiró
+        window.dispatchEvent(new CustomEvent('tokenExpired'));
+        throw new Error('Token expirado. Por favor, inicia sesión nuevamente.');
+      }
+    }
+
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `API request failed: ${response.statusText}`);
     }
 
     return response.json();
+  }
+
+  // Verificar si un token es válido
+  async validateToken(token: string): Promise<boolean> {
+    try {
+      await this.request('/validate-token', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   // Login
@@ -71,11 +102,12 @@ class ApiService {
   }
 
   // Add review to a game (token required)
-  async addReview(gameId: number, review: Omit<Review, 'id'>, token: string): Promise<Review> {
+  async addReview(gameId: number, review: { comment: string; rating: number }, token: string): Promise<Review> {
     return this.request<Review>(`/games/${gameId}/reviews`, {
       method: 'POST',
       body: JSON.stringify(review),
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
     });

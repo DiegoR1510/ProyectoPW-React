@@ -14,15 +14,18 @@ const ConfirmEmail: React.FC = () => {
     }
     fetch(`/api/confirm-email?token=${token}`)
       .then(async res => {
+        const data = await res.json();
         if (!res.ok) {
-          const data = await res.json();
+          // Si el mensaje es 'Correo ya confirmado previamente.', mostrar éxito
+          if (data.message && data.message.includes('Correo ya confirmado')) {
+            setStatus('success');
+            setMessage(data.message);
+            return;
+          }
           throw new Error(data.message || 'Error al confirmar el correo');
         }
-        return res.json();
-      })
-      .then(() => {
         setStatus('success');
-        setMessage('¡Correo confirmado correctamente! Ya puedes iniciar sesión.');
+        setMessage(data.message || '¡Correo confirmado correctamente! Ya puedes iniciar sesión.');
       })
       .catch(err => {
         setStatus('error');

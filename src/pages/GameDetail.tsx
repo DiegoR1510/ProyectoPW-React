@@ -63,12 +63,16 @@ const GameDetail: React.FC = () => {
       return;
     }
 
+    if (!token) {
+      alert('Debes iniciar sesión para escribir una reseña');
+      return;
+    }
+
     try {
       await apiService.addReview(game.id, {
-        user: user?.name || 'Anonymous',
         comment: newReview.comment,
         rating: newReview.rating
-      }, token || '');
+      }, token);
 
       // Refresh the game data to show the new review
       const updatedGame = await apiService.getGame(game.id);
@@ -77,9 +81,18 @@ const GameDetail: React.FC = () => {
       setNewReview({ rating: 0, comment: '' });
       setShowReviewForm(false);
       alert('Reseña enviada exitosamente!');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting review:', err);
-      alert('Error al enviar la reseña. Inténtalo de nuevo.');
+      
+      // Manejar errores específicos
+      if (err.message.includes('Token expirado')) {
+        alert('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+        // El AuthContext ya maneja la redirección automáticamente
+      } else if (err.message.includes('Token inválido')) {
+        alert('Error de autenticación. Por favor, inicia sesión nuevamente.');
+      } else {
+        alert('Error al enviar la reseña. Inténtalo de nuevo.');
+      }
     }
   };
 

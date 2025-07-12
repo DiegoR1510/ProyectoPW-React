@@ -107,11 +107,17 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'Token requerido' });
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Token inválido' });
+    if (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(403).json({ message: 'Token expirado' });
+      }
+      return res.status(403).json({ message: 'Token inválido' });
+    }
     req.user = user;
     next();
   });
 }
+
 // Middleware para verificar rol de admin
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
@@ -121,51 +127,114 @@ function requireAdmin(req, res, next) {
 }
 
 // --- ENDPOINTS DE AUTENTICACIÓN ---
+// Login
 app.post('/api/login', (req, res) => {
   const { name, password } = req.body;
-  const user = db.prepare('SELECT id, name, password, role FROM users WHERE name = ?').get(name);
+  // Buscar por nombre de usuario
+  const user = db.prepare('SELECT id, nombre, password, correo, estado FROM usuario WHERE nombre = ?').get(name);
   if (!user || user.password !== password) {
     return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
   }
   // No enviar password en el token
-  const token = jwt.sign({ id: user.id, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
-  res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+  const token = jwt.sign({ id: user.id, name: user.nombre, correo: user.correo, role: 'user' }, JWT_SECRET, { expiresIn: '2h' });
+  res.json({ token, user: { id: user.id, name: user.nombre, correo: user.correo, role: 'user' } });
 });
 
-// Registro de usuario con email único y envío de email de confirmación
+// Endpoint para validar token
+app.get('/api/validate-token', authenticateToken, (req, res) => {
+  res.json({ valid: true, user: req.user });
+});
+
+// Endpoint para renovar token
+app.post('/api/refresh-token', authenticateToken, (req, res) => {
+  const newToken = jwt.sign(
+    { id: req.user.id, name: req.user.name, role: req.user.role }, 
+    JWT_SECRET, 
+    { expiresIn: '2h' }
+  );
+  res.json({ token: newToken });
+});
+
+// Registro de usuario
 app.post('/api/register', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Faltan campos requeridos' });
   }
   // Verifica que el email no exista
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const existing = db.prepare('SELECT id FROM usuario WHERE correo = ?').get(email);
   if (existing) {
     return res.status(400).json({ message: 'El email ya está registrado' });
   }
-  const stmt = db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)');
-  const info = stmt.run(name, email, password, 'user', 0);
-  // Generar token y guardar
-  const token = crypto.randomBytes(32).toString('hex');
-  db.prepare('INSERT INTO email_tokens (user_id, token, type) VALUES (?, ?, ?)').run(info.lastInsertRowid, token, 'verify');
-  const confirmUrl = `http://localhost:3000/confirm-email?token=${token}`;
-  await transporter.sendMail({
-    from: 'Diego <20204879@aloe.ulima.edu.pe>',
-    to: email,
-    subject: 'Confirma tu correo',
-    html: `<p>Haz clic <a href="${confirmUrl}">aquí</a> para confirmar tu correo.</p>`
-  });
+  console.log('Insertando usuario:', name, email);
+  const stmt = db.prepare('INSERT INTO usuario (nombre, correo, password, estado) VALUES (?, ?, ?, 1)');
+  const info = stmt.run(name, email, password);
+  console.log('Usuario insertado con id:', info.lastInsertRowid);
+
+  // Aquí podrías agregar lógica de confirmación de correo si lo deseas
   res.status(201).json({ id: info.lastInsertRowid, name, email });
 });
 
 // Confirmación de email
 app.get('/api/confirm-email', (req, res) => {
   const { token } = req.query;
-  const row = db.prepare('SELECT user_id FROM email_tokens WHERE token = ? AND type = ?').get(token, 'verify');
-  if (!row) return res.status(400).json({ message: 'Token inválido' });
-  db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(row.user_id);
-  db.prepare('DELETE FROM email_tokens WHERE token = ?').run(token);
-  res.json({ message: 'Correo confirmado correctamente' });
+  console.log('Confirmación de email solicitada con token:', token);
+
+  if (!token) {
+    console.log('Error: Token no proporcionado');
+    return res.status(400).json({ message: 'Token no proporcionado' });
+  }
+
+  // Buscar el token en la base de datos
+  const row = db.prepare('SELECT user_id, created_at FROM email_tokens WHERE token = ? AND type = ?').get(token, 'verify');
+  console.log('Resultado de búsqueda de token:', row);
+
+  if (!row) {
+    // Intentar buscar el usuario por el token aunque el token ya no exista
+    const userRow = db.prepare('SELECT usuario.is_verified FROM usuario JOIN email_tokens ON usuario.id = email_tokens.user_id WHERE email_tokens.token = ?').get(token);
+    // Si no se encuentra por el token, intentar buscar por el usuario (por si el token ya fue eliminado)
+    if (!userRow) {
+      const userByToken = db.prepare('SELECT is_verified FROM usuario WHERE id = (SELECT user_id FROM email_tokens WHERE token = ?)').get(token);
+      if (userByToken && userByToken.is_verified === 1) {
+        console.log('Usuario ya estaba verificado (por id). Respondiendo éxito.');
+        return res.json({ message: 'Correo confirmado correctamente' });
+      }
+    } else if (userRow.is_verified === 1) {
+      console.log('Usuario ya estaba verificado. Respondiendo éxito.');
+      return res.json({ message: 'Correo confirmado correctamente' });
+    }
+    console.log('Error: Token no encontrado en la base de datos');
+    return res.status(400).json({ message: 'Token inválido o expirado' });
+  }
+
+  // Verificar si el token no ha expirado (24 horas)
+  const tokenAge = db.prepare(`
+    SELECT 
+      (julianday('now') - julianday(created_at)) * 24 as hours_old
+    FROM email_tokens 
+    WHERE token = ?
+  `).get(token);
+
+  console.log('Edad del token (horas):', tokenAge?.hours_old);
+
+  if (tokenAge && tokenAge.hours_old > 24) {
+    console.log('Error: Token expirado');
+    db.prepare('DELETE FROM email_tokens WHERE token = ?').run(token);
+    return res.status(400).json({ message: 'Token expirado. Solicita un nuevo enlace de confirmación.' });
+  }
+
+  try {
+    // Actualizar usuario como verificado
+    const updateResult = db.prepare('UPDATE usuario SET is_verified = 1 WHERE id = ?').run(row.user_id);
+    console.log('Usuario actualizado:', updateResult);
+    // Eliminar el token usado
+    const deleteResult = db.prepare('DELETE FROM email_tokens WHERE token = ?').run(token);
+    console.log('Token eliminado:', deleteResult);
+    res.json({ message: 'Correo confirmado correctamente' });
+  } catch (error) {
+    console.error('Error al confirmar email:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
 });
 
 // Solicitud de recuperación de contraseña
@@ -197,67 +266,188 @@ app.post('/api/reset-password', (req, res) => {
 
 // --- RUTAS DE JUEGOS Y REVIEWS ---
 app.get('/api/games/top-rated', (req, res) => {
-  const games = db.prepare('SELECT * FROM games').all();
-  const parsed = games.map(g => {
-    const genre = JSON.parse(g.genre);
-    const platform = JSON.parse(g.platform);
-    const reviews = db.prepare('SELECT id, user, comment, rating FROM reviews WHERE game_id = ?').all(g.id);
-    const avgRating = reviews.length
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+  const juegos = db.prepare('SELECT * FROM juego').all();
+  const result = juegos.map(j => {
+    // Obtener categoría
+    let categoria = null;
+    if (j.categoria_id) {
+      const cat = db.prepare('SELECT nombre FROM categoria WHERE id = ?').get(j.categoria_id);
+      categoria = cat ? cat.nombre : null;
+    }
+    // Obtener plataformas
+    const plataformas = db.prepare(`
+      SELECT p.nombre FROM plataforma p
+      JOIN juego_plataforma jp ON jp.plataforma_id = p.id
+      WHERE jp.juego_id = ?
+    `).all(j.id).map(p => p.nombre);
+    // Obtener calificaciones
+    const calificaciones = db.prepare(`
+      SELECT c.valoracion as rating, c.comentario as comment, u.nombre as user
+      FROM calificacion c JOIN usuario u ON c.usuario_id = u.id
+      WHERE c.juego_id = ?
+    `).all(j.id);
+    // Calcular promedio
+    const avgRating = calificaciones.length
+      ? calificaciones.reduce((sum, r) => sum + r.rating, 0) / calificaciones.length
       : 0;
-    return { ...g, genre, platform, reviews, avgRating };
+    return {
+      id: j.id,
+      title: j.nombre,
+      price: j.precio,
+      image: j.image || '',
+      trailer: j.trailer || '',
+      genre: categoria ? [categoria] : [],
+      platform: plataformas,
+      reviews: calificaciones,
+      avgRating,
+      esta_oferta: j.esta_oferta,
+      precio_oferta: j.precio_oferta
+    };
   });
+  // Filtrar solo juegos con al menos una review
+  const conReviews = result.filter(j => j.reviews.length > 0);
   // Ordenar por promedio de rating descendente y devolver los primeros 4
-  parsed.sort((a, b) => b.avgRating - a.avgRating);
-  res.json(parsed.slice(0, 4));
+  conReviews.sort((a, b) => b.avgRating - a.avgRating);
+  res.json(conReviews.slice(0, 4));
 });
 
 app.get('/api/games/top-sellers', (req, res) => {
-  const games = db.prepare('SELECT * FROM games').all();
-  const parsed = games.slice(0, 4).map(g => ({
-    ...g,
-    genre: JSON.parse(g.genre),
-    platform: JSON.parse(g.platform),
-    reviews: []
-  }));
-  res.json(parsed);
+  const juegos = db.prepare('SELECT * FROM juego').all();
+  const result = juegos.slice(0, 4).map(j => {
+    // Obtener categoría
+    let categoria = null;
+    if (j.categoria_id) {
+      const cat = db.prepare('SELECT nombre FROM categoria WHERE id = ?').get(j.categoria_id);
+      categoria = cat ? cat.nombre : null;
+    }
+    // Obtener plataformas
+    const plataformas = db.prepare(`
+      SELECT p.nombre FROM plataforma p
+      JOIN juego_plataforma jp ON jp.plataforma_id = p.id
+      WHERE jp.juego_id = ?
+    `).all(j.id).map(p => p.nombre);
+    // Obtener calificaciones
+    const calificaciones = db.prepare(`
+      SELECT c.valoracion as rating, c.comentario as comment, u.nombre as user
+      FROM calificacion c JOIN usuario u ON c.usuario_id = u.id
+      WHERE c.juego_id = ?
+    `).all(j.id);
+    return {
+      id: j.id,
+      title: j.nombre,
+      price: j.precio,
+      image: j.image || '',
+      trailer: j.trailer || '',
+      genre: categoria ? [categoria] : [],
+      platform: plataformas,
+      reviews: calificaciones,
+      esta_oferta: j.esta_oferta,
+      precio_oferta: j.precio_oferta
+    };
+  });
+  res.json(result);
 });
 
+// --- ENDPOINTS DE JUEGOS ---
+// Listado de juegos
 app.get('/api/games', (req, res) => {
-  const games = db.prepare('SELECT * FROM games').all();
-  // Parsear genre y platform de JSON
-  const parsed = games.map(g => ({ ...g, genre: JSON.parse(g.genre), platform: JSON.parse(g.platform) }));
-  res.json(parsed);
+  const juegos = db.prepare('SELECT * FROM juego').all();
+  const result = juegos.map(j => {
+    // Obtener categoría
+    let categoria = null;
+    if (j.categoria_id) {
+      const cat = db.prepare('SELECT nombre FROM categoria WHERE id = ?').get(j.categoria_id);
+      categoria = cat ? cat.nombre : null;
+    }
+    // Obtener plataformas
+    const plataformas = db.prepare(`
+      SELECT p.nombre FROM plataforma p
+      JOIN juego_plataforma jp ON jp.plataforma_id = p.id
+      WHERE jp.juego_id = ?
+    `).all(j.id).map(p => p.nombre);
+    // Obtener calificaciones
+    const calificaciones = db.prepare(`
+      SELECT c.valoracion as rating, c.comentario as comment, u.nombre as user
+      FROM calificacion c JOIN usuario u ON c.usuario_id = u.id
+      WHERE c.juego_id = ?
+    `).all(j.id);
+    return {
+      id: j.id,
+      title: j.nombre,
+      price: j.precio,
+      image: j.image || '',
+      trailer: j.trailer || '',
+      genre: categoria ? [categoria] : [],
+      platform: plataformas,
+      reviews: calificaciones,
+      esta_oferta: j.esta_oferta,
+      precio_oferta: j.precio_oferta // <-- Añadido
+    };
+  });
+  res.json(result);
 });
 
+// Detalle de juego
 app.get('/api/games/:id', (req, res) => {
-  const game = db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id);
-  if (!game) {
-    return res.status(404).json({ message: 'Game not found' });
+  const j = db.prepare('SELECT * FROM juego WHERE id = ?').get(req.params.id);
+  if (!j) return res.status(404).json({ message: 'Game not found' });
+  // Obtener categoría
+  let categoria = null;
+  if (j.categoria_id) {
+    const cat = db.prepare('SELECT nombre FROM categoria WHERE id = ?').get(j.categoria_id);
+    categoria = cat ? cat.nombre : null;
   }
-  game.genre = JSON.parse(game.genre);
-  game.platform = JSON.parse(game.platform);
-  // Obtener reviews de la base de datos
-  const reviews = db.prepare('SELECT id, user, comment, rating FROM reviews WHERE game_id = ?').all(game.id);
-  game.reviews = reviews;
-  res.json(game);
+  // Obtener plataformas
+  const plataformas = db.prepare(`
+    SELECT p.nombre FROM plataforma p
+    JOIN juego_plataforma jp ON jp.plataforma_id = p.id
+    WHERE jp.juego_id = ?
+  `).all(j.id).map(p => p.nombre);
+  // Obtener calificaciones
+  const calificaciones = db.prepare(`
+    SELECT c.valoracion as rating, c.comentario as comment, u.nombre as user
+    FROM calificacion c JOIN usuario u ON c.usuario_id = u.id
+    WHERE c.juego_id = ?
+  `).all(j.id);
+  const result = {
+    id: j.id,
+    title: j.nombre,
+    price: j.precio,
+    image: j.image || '',
+    trailer: j.trailer || '',
+    genre: categoria ? [categoria] : [],
+    platform: plataformas,
+    reviews: calificaciones
+  };
+  res.json(result);
 });
 
 // --- PROTEGER REVIEWS: SOLO USUARIOS AUTENTICADOS ---
 app.post('/api/games/:id/reviews', authenticateToken, (req, res) => {
   const gameId = parseInt(req.params.id);
-  const { user, comment, rating } = req.body;
-  if (!user || !comment || !rating) {
+  const { comment, rating } = req.body;
+  const userId = req.user.id;
+  // LOGS DE DEPURACIÓN
+  console.log('--- NUEVA REVIEW ---');
+  console.log('req.user:', req.user);
+  console.log('userId:', userId);
+  console.log('comment:', comment);
+  console.log('rating:', rating);
+  if (!userId || !comment || !rating) {
+    console.log('FALTA ALGÚN DATO: userId, comment o rating');
     return res.status(400).json({ message: 'User, comment, and rating are required' });
   }
   if (rating < 1 || rating > 5) {
     return res.status(400).json({ message: 'Rating must be between 1 and 5' });
   }
-  const stmt = db.prepare('INSERT INTO reviews (game_id, user, comment, rating) VALUES (?, ?, ?, ?)');
-  const info = stmt.run(gameId, user, comment, rating);
+  // Insertar en calificacion
+  const stmt = db.prepare('INSERT INTO calificacion (valoracion, comentario, juego_id, usuario_id) VALUES (?, ?, ?, ?)');
+  const info = stmt.run(rating, comment, gameId, userId);
+  // Obtener nombre de usuario
+  const user = db.prepare('SELECT nombre FROM usuario WHERE id = ?').get(userId);
   const newReview = {
     id: info.lastInsertRowid,
-    user,
+    user: user ? user.nombre : 'Usuario',
     comment,
     rating
   };
