@@ -1,5 +1,4 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { games } from '../data/games.js';
 
 export interface CartItem {
   id: number;

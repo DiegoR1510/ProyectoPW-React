@@ -17,6 +17,9 @@ import TopRated from './pages/TopRated';
 import ConfirmEmail from './pages/ConfirmEmail';
 import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import HistorialCompra from './pages/HistorialCompra';
+import UsuariosAdmin from './pages/UsuariosAdmin';
 
 const App: React.FC = () => {
   return (
@@ -30,6 +33,7 @@ const App: React.FC = () => {
               <Route path="/game/:id" element={<GameDetail />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
+              <Route path="/historial-compra" element={<HistorialCompra />} />
               <Route path="/thankyou" element={<ThankYou />} />
               <Route path="/news" element={<News />} />
               <Route path="/login" element={<Login />} />
@@ -39,6 +43,8 @@ const App: React.FC = () => {
               <Route path="/confirm-email" element={<ConfirmEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/usuarios-admin" element={<UsuariosAdmin />} />
             </Routes>
           </Router>
         </NewsProvider>

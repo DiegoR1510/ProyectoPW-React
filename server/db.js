@@ -2,36 +2,25 @@ import Database from 'better-sqlite3';
 
 const db = new Database('data.sqlite');
 
-// Crear tabla de usuarios
-// id, name, password, role
-// (En producción, las contraseñas deben ir hasheadas)
+// Eliminar la tabla usuario y su creación
+// Crear tabla de usuario (para compatibilidad con el código existente)
 db.exec(`
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS usuario (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
+  nombre TEXT NOT NULL,
+  correo TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  role TEXT NOT NULL,
-  is_verified INTEGER DEFAULT 0
+  estado INTEGER DEFAULT 1,
+  is_verified INTEGER DEFAULT 0,
+  role TEXT NOT NULL DEFAULT 'user'
 );
 `);
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS email_tokens (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  token TEXT NOT NULL,
-  type TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
-`);
-
-// Insertar usuarios de ejemplo si no existen
-const existing = db.prepare('SELECT COUNT(*) as count FROM users').get();
-if (existing.count === 0) {
-  db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run('admin', 'admin@admin.com', 'admin123', 'admin', 1);
-  db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run('usuario', 'usuario@usuario.com', 'usuario123', 'user', 1);
+// Insertar usuarios de ejemplo en la tabla usuario si no existen
+const existingUsuario = db.prepare('SELECT COUNT(*) as count FROM usuario').get();
+if (existingUsuario.count === 0) {
+  db.prepare('INSERT INTO usuario (nombre, correo, password, estado, is_verified, role) VALUES (?, ?, ?, ?, ?, ?)').run('admin', 'admin@admin.com', 'admin123', 1, 1, 'admin');
+  db.prepare('INSERT INTO usuario (nombre, correo, password, estado, is_verified, role) VALUES (?, ?, ?, ?, ?, ?)').run('usuario', 'usuario@usuario.com', 'usuario123', 1, 1, 'user');
 }
 
 // Crear tabla de juegos
@@ -107,6 +96,17 @@ CREATE TABLE IF NOT EXISTS reviews (
   comment TEXT NOT NULL,
   rating INTEGER NOT NULL,
   FOREIGN KEY (game_id) REFERENCES games(id)
+);
+`);
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS email_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  token TEXT NOT NULL,
+  type TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES usuario(id)
 );
 `);
 

@@ -41,10 +41,10 @@ for (const g of oldGames) {
 console.log('Juegos migrados.');
 
 // 2. Migrar usuarios
-const oldUsers = db.prepare('SELECT * FROM users').all();
+const oldUsers = db.prepare('SELECT * FROM usuario').all();
 for (const u of oldUsers) {
   db.prepare(`INSERT OR IGNORE INTO usuario (id, correo, password, nombre, token, estado, is_verified) VALUES (?, ?, ?, ?, NULL, 1, ?)`).run(
-    u.id, u.email || u.name + '@mail.com', u.password, u.name, u.is_verified || 1
+    u.id, u.correo || u.nombre + '@mail.com', u.password, u.nombre, u.is_verified || 1
   );
 }
 console.log('Usuarios migrados.');

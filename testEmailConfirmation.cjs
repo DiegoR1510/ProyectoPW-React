@@ -12,15 +12,15 @@ const testName = 'usuario_test';
 const testPassword = 'password123';
 
 // Verificar si el usuario ya existe
-const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(testEmail);
+const existingUser = db.prepare('SELECT id FROM usuario WHERE correo = ?').get(testEmail);
 if (existingUser) {
   console.log('Usuario ya existe, eliminando...');
   db.prepare('DELETE FROM email_tokens WHERE user_id = ?').run(existingUser.id);
-  db.prepare('DELETE FROM users WHERE id = ?').run(existingUser.id);
+  db.prepare('DELETE FROM usuario WHERE id = ?').run(existingUser.id);
 }
 
 // Insertar nuevo usuario
-const userResult = db.prepare('INSERT INTO users (name, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run(testName, testEmail, testPassword, 'user', 0);
+const userResult = db.prepare('INSERT INTO usuario (nombre, correo, password, role, is_verified) VALUES (?, ?, ?, ?, ?)').run(testName, testEmail, testPassword, 'user', 0);
 console.log('Usuario creado con ID:', userResult.lastInsertRowid);
 
 // 2. Crear token de verificación
@@ -43,7 +43,7 @@ console.log('Token para confirmación:', confirmResult);
 
 if (confirmResult) {
   // Actualizar usuario como verificado
-  const updateResult = db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(confirmResult.user_id);
+  const updateResult = db.prepare('UPDATE usuario SET is_verified = 1 WHERE id = ?').run(confirmResult.user_id);
   console.log('Usuario actualizado:', updateResult);
   
   // Eliminar token
@@ -57,7 +57,7 @@ if (confirmResult) {
 
 // 5. Verificar estado final
 console.log('\n5. Estado final:');
-const finalUser = db.prepare('SELECT id, name, email, is_verified FROM users WHERE email = ?').get(testEmail);
+const finalUser = db.prepare('SELECT id, nombre, correo, is_verified FROM usuario WHERE correo = ?').get(testEmail);
 console.log('Usuario final:', finalUser);
 
 const remainingTokens = db.prepare('SELECT * FROM email_tokens WHERE user_id = ?').all(userResult.lastInsertRowid);

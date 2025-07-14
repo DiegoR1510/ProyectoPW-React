@@ -15,7 +15,7 @@ console.log(allTokens);
 
 // Verificar usuarios
 console.log('\n3. Usuarios en la base de datos:');
-const users = db.prepare('SELECT id, name, email, is_verified FROM users').all();
+const users = db.prepare('SELECT id, nombre, correo, is_verified FROM usuario').all();
 console.log(users);
 
 // Verificar si hay tokens de verificación

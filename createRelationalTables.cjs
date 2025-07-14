@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS usuario (
     nombre TEXT NOT NULL,
     token TEXT,
     estado INTEGER DEFAULT 1,
-    is_verified INTEGER DEFAULT 0
+    is_verified INTEGER DEFAULT 0,
+    role TEXT NOT NULL DEFAULT 'user'
 );
 
 -- Tabla Plataforma
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS juego (
     estado INTEGER DEFAULT 1,
     image TEXT,
     trailer TEXT,
+    precio_oferta REAL,
     FOREIGN KEY (categoria_id) REFERENCES categoria(id)
 );
 

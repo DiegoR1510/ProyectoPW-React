@@ -34,9 +34,17 @@ const Navbar: React.FC = () => {
             <li className="nav-item">
               <Link className="nav-link" to="/top-rated">Juegos con mejor calificación</Link>
             </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/historial-compra">Historial de compras</Link>
+            </li>
             {user?.role === 'admin' && (
               <li className="nav-item">
                 <Link className="nav-link" to="/admin">Admin</Link>
+              </li>
+            )}
+            {user?.role === 'admin' && (
+              <li className="nav-item">
+                <Link className="nav-link" to="/usuarios-admin">Usuarios</Link>
               </li>
             )}
           </ul>

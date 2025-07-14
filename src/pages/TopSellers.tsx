@@ -138,7 +138,16 @@ const TopSellers: React.FC = () => {
               />
               <div className="card-body d-flex flex-column">
                 <h5 className="card-title">{game.title}</h5>
-                <p className="card-text">${game.price.toFixed(2)}</p>
+                <p className="card-text">
+                  {game.precio_oferta !== null && game.precio_oferta !== undefined ? (
+                    <>
+                      <span style={{ textDecoration: 'line-through', color: '#888', marginRight: 8 }}>${game.price}</span>
+                      <span style={{ color: '#d32f2f', fontWeight: 'bold' }}>${game.precio_oferta}</span>
+                    </>
+                  ) : (
+                    <span>${game.price}</span>
+                  )}
+                </p>
                 <div className="mb-2">
                   <StarRating 
                     rating={getAverageRating(game)} 

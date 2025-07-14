@@ -13,11 +13,13 @@
     "cleanup-tokens": "node cleanupTokens.cjs"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.2.0",
     "body-parser": "^1.20.2",
     "bootstrap": "^5.3.7",
     "chart.js": "^4.4.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^7.0.5",

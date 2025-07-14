@@ -250,16 +250,16 @@ const Home: React.FC = () => {
               />
               <div className="card-body d-flex flex-column">
                 <h5 className="card-title">{game.title}</h5>
-                {game.esta_oferta === 1 && game.precio_oferta ? (
-                  <>
-                    <p className="card-text mb-1">
-                      <span style={{ textDecoration: 'line-through', color: '#888', marginRight: 8 }}>${game.price.toFixed(2)}</span>
-                      <span className="fw-bold text-danger">${game.precio_oferta.toFixed(2)}</span>
-                    </p>
-                  </>
-                ) : (
-                  <p className="card-text mb-1">${game.price.toFixed(2)}</p>
-                )}
+                <p className="card-text">
+                  {game.precio_oferta !== null && game.precio_oferta !== undefined ? (
+                    <>
+                      <span style={{ textDecoration: 'line-through', color: '#888', marginRight: 8 }}>${game.price}</span>
+                      <span style={{ color: '#d32f2f', fontWeight: 'bold' }}>${game.precio_oferta}</span>
+                    </>
+                  ) : (
+                    <span>${game.price}</span>
+                  )}
+                </p>
                 <p className="mb-1"><span className="fw-bold">Género:</span> {(Array.isArray(game.genre) ? game.genre : [game.genre]).filter(Boolean).join(', ')}</p>
                 <p className="mb-2"><span className="fw-bold">Plataforma:</span> {(Array.isArray(game.platform) ? game.platform : [game.platform]).filter(Boolean).join(', ')}</p>
                 <div className="mt-auto d-flex gap-2">

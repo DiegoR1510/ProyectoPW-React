@@ -27,6 +27,14 @@ export interface User {
   role: 'admin' | 'user';
 }
 
+export interface Venta {
+  id: number;
+  fecha: string;
+  codigo: string;
+  monto_pagado: number;
+  juego: string;
+}
+
 // Evento personalizado para notificar cuando el token expira
 export const tokenExpiredEvent = new CustomEvent('tokenExpired');
 
@@ -123,10 +131,77 @@ class ApiService {
     });
   }
 
+  // Actualizar precio de oferta de un juego (admin only, token required)
+  async setGameOffer(gameId: number, precio_oferta: number, token: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/games/${gameId}/oferta`, {
+      method: 'PATCH',
+      body: JSON.stringify({ precio_oferta }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
+  // Obtener historial de compras del usuario
+  async getHistorialVentas(usuarioId: number, token?: string): Promise<Venta[]> {
+    return this.request<Venta[]>(`/ventas/${usuarioId}`, {
+      headers: {
+        'Authorization': `Bearer ${token || localStorage.getItem('token') || ''}`
+      }
+    });
+  }
+  // Obtener ganancias por mes (solo admin)
+  async getEarningsByMonth(token: string): Promise<number[]> {
+    const res = await this.request<{ earnings: number[] }>(
+      '/admin/earnings-by-month',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+    return res.earnings;
+  }
+  // Obtener todas las ventas (solo admin)
+  async getAllVentas(token: string): Promise<any[]> {
+    return this.request<any[]>(
+      '/ventas',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+  }
+  // Obtener cantidad de usuarios (solo admin)
+  async getUsuariosCount(token: string): Promise<number> {
+    const res = await this.request<{ total: number }>(
+      '/usuarios/count',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+    return res.total;
+  }
+
+  // Obtener lista de usuarios (solo admin)
+  async getUsuarios(token: string): Promise<any[]> {
+    return this.request<any[]>(
+      '/usuarios',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+  }
   // Health check
   async healthCheck(): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>('/health');
   }
 }
-
+// obtener historial
 export const apiService = new ApiService(); 

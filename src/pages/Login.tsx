@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const Login: React.FC = () => {
@@ -80,6 +80,9 @@ const Login: React.FC = () => {
           <div className="text-center mt-3">
             <span>¿No tienes cuenta? </span>
             <a href="/register" className="btn btn-link">Regístrate</a>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <Link to="/forgot-password">¿Olvidaste tu contraseña?</Link>
           </div>
         </>
       )}
