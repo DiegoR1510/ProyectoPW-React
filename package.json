@@ -1,5 +1,6 @@
 {
   "name": "proyecto-pw",
+  "homepage": "https://DiegoR1510.github.io/ProyectoPW-React",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +11,9 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "dev:full": "concurrently \"npm run dev\" \"npm run server\"",
-    "cleanup-tokens": "node cleanupTokens.cjs"
+    "cleanup-tokens": "node cleanupTokens.cjs",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -38,6 +41,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "gh-pages": "^6.3.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
   }
